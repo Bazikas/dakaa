@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* DAKAA V8 - Pages complémentaires */
+.dakaa-secondary-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #07152e 0%, #111b3b 100%);
+  color: #f8fafc;
+}
+
+.dakaa-secondary-page h1,
+.dakaa-secondary-page h2,
+.dakaa-secondary-page h3 {
+  color: #ffffff;
+}
+
+.dakaa-secondary-page p {
+  color: #cbd5e1;
+}
+
+.dakaa-secondary-page a {
+  color: #ffffff;
+}
+
