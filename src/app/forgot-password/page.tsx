@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -29,7 +29,7 @@ export default function ForgotPasswordPage() {
       const supabase = createClient(url, key);
 
       const redirectTo =
-        window.location.origin + "/reset-password";
+        "https://dakaa-production.up.railway.app/reset-password";
 
       const { error: resetError } =
         await supabase.auth.resetPasswordForEmail(email.trim(), {

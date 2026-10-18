@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -91,16 +91,11 @@ export default function ResetPasswordPage() {
 
       if (!mounted) return;
 
-      const { data } = await supabase.auth.getSession();
-
       if (mounted) {
-        if (data.session) {
-          setReady(true);
-        } else {
-          setMessage(
-            "افتح رابط الاستعادة الذي وصلك عبر البريد الإلكتروني."
-          );
-        }
+        setReady(false);
+        setMessage(
+          "افتح رابط الاستعادة الجديد الذي وصلك عبر البريد الإلكتروني."
+        );
       }
     }
 
