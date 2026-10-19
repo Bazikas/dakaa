@@ -143,7 +143,6 @@ export default function DiagnosticPage() {
     if (aiLoading) return;
     setAiLoading(true);
     setAiError("");
-    setAiResult(null);
     try {
       const response = await fetch("/api/diagnostic/analyze", {
         method: "POST",
@@ -241,7 +240,6 @@ export default function DiagnosticPage() {
 
   function restart() {
         setData(initialData);
-    setAiResult(null);
     setStep(0);
     try { localStorage.removeItem("dakaa_public_diagnostic_ai_v1"); } catch { /* optional */ }
 
@@ -454,32 +452,6 @@ export default function DiagnosticPage() {
               </div>
             </div>
 
-            <div className="mb-8 rounded-2xl border border-violet-500/30 bg-violet-500/10 p-6">
-              <h2 className="mb-3 text-xl font-black">تحليل شخصي بالذكاء الاصطناعي</h2>
-              <p className="mb-4 text-sm leading-7 text-slate-300">يمكنك طلب تحليل أولي مجاني. لن نفتح أي درس قبل الاشتراك.</p>
-              <button type="button" disabled={aiLoading} onClick={analyzeWithAi}
-                className="rounded-xl bg-violet-600 px-6 py-3 font-bold disabled:opacity-50">
-                {aiLoading ? "جاري تحليل احتياجاتك..." : "حلّل احتياجاتي بالذكاء الاصطناعي"}
-              </button>
-              {aiError && <p className="mt-4 break-words text-sm text-amber-300">{aiError}</p>}
-              {aiResult && <div className="mt-6 space-y-5">
-                <p className="whitespace-pre-wrap leading-8 text-slate-100">{aiResult.summary}</p>
-                {aiResult.followUp && <div className="rounded-xl border border-amber-500/30 p-4 text-amber-200">
-                  <strong>سؤال لمزيد من التخصيص:</strong> {aiResult.followUp}
-                  <p className="mt-2 text-xs">يمكنك تعديل وصف مشروعك ثم إعادة التحليل.</p>
-                </div>}
-                <h3 className="font-black">وحدات حقيقية من مكتبة DAKAA</h3>
-                {aiResult.modules.length === 0 && <p>لا توجد توصيات متاحة من المكتبة حالياً.</p>}
-                {aiResult.modules.map((module, index) => <div key={module.id} className="rounded-xl border border-slate-700 bg-[#091831] p-4">
-                  <strong>{module.title_ar}</strong>
-                  {aiResult.reasons[index] && <p className="mt-2 text-sm text-slate-300">{aiResult.reasons[index]}</p>}
-                </div>)}
-                <h3 className="font-black">خطة مقترحة</h3>
-                <ol className="list-inside list-decimal space-y-2 text-slate-200">
-                  {aiResult.plan.map((item, index) => <li key={index}>{item}</li>)}
-                </ol>
-              </div>}
-            </div>
             <div className="mb-7 rounded-2xl border border-slate-700 p-6">
               <h2 className="mb-4 text-xl font-black">
                 ما الذي تريد تحقيقه؟
