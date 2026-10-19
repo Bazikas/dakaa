@@ -127,16 +127,28 @@ export async function POST(request: NextRequest) {
         ? subscription.customer
         : subscription.customer.id;
 
+    // Lire la version actuelle de l'abonnement Stripe.
+    subscription = await stripe.subscriptions.retrieve(subscription.id);
+
     const item = subscription.items.data[0];
 
-    const periodStart = item?.current_period_start
-      ? new Date(item.current_period_start * 1000).toISOString()
+    const startTimestamp = item?.current_period_start;
+    const endTimestamp = item?.current_period_end;
+
+    if (
+      subscription.status === "active" &&
+      (!startTimestamp || !endTimestamp || endTimestamp <= startTimestamp)
+    ) {
+      throw new Error("Abonnement actif sans periode Stripe valide.");
+    }
+
+    const periodStart = startTimestamp
+      ? new Date(startTimestamp * 1000).toISOString()
       : null;
 
-    const periodEnd = item?.current_period_end
-      ? new Date(item.current_period_end * 1000).toISOString()
+    const periodEnd = endTimestamp
+      ? new Date(endTimestamp * 1000).toISOString()
       : null;
-
     const canceledAt = subscription.canceled_at
       ? new Date(subscription.canceled_at * 1000).toISOString()
       : null;
@@ -156,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existing, error: lookupError } = await supabase
       .from("user_subscriptions")
-      .select("id")
+      .select("id, user_id, stripe_customer_id")
       .eq("stripe_subscription_id", subscription.id)
       .maybeSingle();
 
@@ -165,6 +177,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (existing) {
+
+      if (
+        existing.user_id !== userId ||
+        existing.stripe_customer_id !== customerId
+      ) {
+        console.error("DAKAA WEBHOOK: ownership mismatch", subscription.id);
+        return NextResponse.json(
+          { error: "Subscription ownership mismatch." },
+          { status: 409 }
+        );
+      }
+
+
       const { error } = await supabase
         .from("user_subscriptions")
         .update(payload)

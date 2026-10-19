@@ -20,12 +20,16 @@ export default function ResetPasswordPage() {
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
     if (!url || !key) {
-      setMessage("إعدادات الاتصال غير مكتملة.");
+      queueMicrotask(() => {
+        if (mounted) setMessage("إعدادات الاتصال غير مكتملة.");
+      });
       return;
     }
 
     const supabase = createClient(url, key);
-    setClient(supabase);
+    queueMicrotask(() => {
+      if (mounted) setClient(supabase);
+    });
 
     const subscription = supabase.auth.onAuthStateChange(
       (event) => {

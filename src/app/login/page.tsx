@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { syncPublicDiagnostic } from "@/lib/diagnostic-sync";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +32,7 @@ export default function LoginPage() {
       });
 
       if (error) {
-        console.error("Login error:", error.message);
+        // Authentication errors are displayed in the form.
 
         setMessage(
           "البريد الإلكتروني أو كلمة المرور غير صحيحة"
@@ -41,6 +42,8 @@ export default function LoginPage() {
         return;
       }
 
+            try { await syncPublicDiagnostic(supabase); }
+      catch (syncError) { console.error("Diagnostic sync:", syncError); }
       // Connexion réussie → Dashboard
       router.push("/dashboard");
       router.refresh();

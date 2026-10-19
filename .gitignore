@@ -50,3 +50,18 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+# DAKAA V8 - Local development files
+*.bak
+*.bak-*
+*.backup-*
+*.before-restore-*
+*.backup-accueil
+
+# Local maintenance scripts
+/DAKAA_*.ps1
+/dakaa-*.cjs
+/dakaa_*.py
+
+# Local verification outputs
+*.tmp
+*.temp

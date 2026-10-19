@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -180,6 +180,27 @@ export default function ChallengesPage() {
 
         if (error || !data.user) {
           window.location.replace("/login");
+          return;
+        }
+        // DAKAA_ACCESS_GUARD: verification serveur avant tout chargement pedagogique.
+        const { data: accessSession } = await supabase.auth.getSession();
+        const accessToken = accessSession.session?.access_token;
+        if (!accessToken) {
+          window.location.replace("/login");
+          return;
+        }
+        let accessResponse: Response;
+        try {
+          accessResponse = await fetch("/api/subscription/access", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: "no-store",
+          });
+        } catch {
+          window.location.replace("/pricing");
+          return;
+        }
+        if (!accessResponse.ok) {
+          window.location.replace(accessResponse.status === 401 ? "/login" : "/pricing");
           return;
         }
 

@@ -262,8 +262,8 @@ export default function ProgressPage() {
   ===================================================== */
 
   const nextLesson = useMemo(() => {
-    for (const module of modulesWithProgress) {
-      const lesson = module.lessons.find(
+    for (const courseModule of modulesWithProgress) {
+      const lesson = courseModule.lessons.find(
         (item) => !completedIds.has(item.id)
       );
 

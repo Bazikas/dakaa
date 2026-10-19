@@ -2,7 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Plan = {
   code: "standard" | "premium";
@@ -53,8 +53,142 @@ const plans: Plan[] = [
 export default function PricingPage() {
   const [message, setMessage] = useState("");
 
+  // DAKAA_EXISTING_SUBSCRIBER_V1
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [alreadySubscribed, setAlreadySubscribed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkSubscription() {
+      try {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+        if (!url || !key) {
+          throw new Error("Configuration Supabase manquante.");
+        }
+
+        const supabase = createClient(url, key);
+
+        const { data, error } = await supabase.auth.getSession();
+
+        if (error) throw error;
+
+        if (!data.session?.access_token) {
+          if (!cancelled) {
+            setAlreadySubscribed(false);
+          }
+          return;
+        }
+
+        const response = await fetch("/api/subscription/access", {
+          headers: {
+            Authorization: `Bearer ${data.session.access_token}`,
+          },
+          cache: "no-store",
+        });
+
+        if (response.status === 200) {
+          if (!cancelled) setAlreadySubscribed(true);
+        } else if (
+          response.status === 403 ||
+          response.status === 401
+        ) {
+          if (!cancelled) setAlreadySubscribed(false);
+        } else {
+          throw new Error("Verification de l'abonnement indisponible.");
+        }
+      } catch {
+        if (!cancelled) {
+          setMessage("تعذر التحقق من الاشتراك. يرجى المحاولة لاحقاً.");
+        }
+      } finally {
+        if (!cancelled) setSubscriptionLoading(false);
+      }
+    }
+
+    void checkSubscription();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // DAKAA_STRIPE_RETURN_POLL_V2
+  const [checkoutStatus, setCheckoutStatus] = useState<"waiting" | "confirmed" | "timeout" | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "success") return;
+
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    queueMicrotask(() => {
+      if (!stopped) {
+        setCheckoutStatus("waiting");
+        setSubscriptionLoading(true);
+      }
+    });
+
+    async function pollAccess() {
+      if (stopped) return;
+      try {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+        if (!url || !key) throw new Error("Missing Supabase configuration");
+        const client = createClient(url, key);
+        const { data } = await client.auth.getSession();
+        if (!data.session?.access_token) {
+          setCheckoutStatus("timeout");
+          setSubscriptionLoading(false);
+          return;
+        }
+        const response = await fetch("/api/subscription/access", {
+          headers: { Authorization: `Bearer ${data.session.access_token}` },
+          cache: "no-store",
+        });
+        if (stopped) return;
+        if (response.ok) {
+          setAlreadySubscribed(true);
+          setCheckoutStatus("confirmed");
+          window.location.replace("/dashboard");
+          return;
+        }
+        if (response.status !== 403 && response.status !== 401) {
+          throw new Error("Subscription verification unavailable");
+        }
+      } catch {
+        // Retry transient failures without creating another checkout.
+      }
+      attempts += 1;
+      if (attempts >= 20) {
+        setCheckoutStatus("timeout");
+        setSubscriptionLoading(false);
+        return;
+      }
+      timer = setTimeout(() => { void pollAccess(); }, 3000);
+    }
+
+    void pollAccess();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 async function handleSubscribe(plan: Plan) {
   setMessage("");
+
+  if (subscriptionLoading) {
+    setMessage("يرجى انتظار التحقق من اشتراكك.");
+    return;
+  }
+
+  if (alreadySubscribed) {
+    setMessage("لديك اشتراك نشط بالفعل. يمكنك الدخول إلى دوراتك.");
+    return;
+  }
 
   try {
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -165,6 +299,38 @@ const response = await fetch("/api/stripe/checkout", {
         </p>
       </section>
 
+      {/* DAKAA : abonnement existant */}
+      {alreadySubscribed && (
+        <section className="mx-auto mb-8 max-w-4xl px-5">
+          <div className="rounded-3xl border border-emerald-500/40 bg-emerald-500/10 p-8 text-center">
+            <h3 className="text-2xl font-bold text-emerald-300">
+              اشتراكك في DAKAA نشط
+            </h3>
+
+            <p className="mt-4 text-slate-200">
+              لديك اشتراك فعال. لا تحتاج إلى الدفع مرة أخرى.
+            </p>
+
+            <Link
+              href="/dashboard"
+              className="mt-6 inline-block rounded-xl bg-emerald-600 px-8 py-4 font-bold text-white"
+            >
+              الدخول إلى لوحة التعلم
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {checkoutStatus === "waiting" && (
+        <section role="status" className="mx-auto mb-8 max-w-4xl rounded-2xl border border-blue-400/40 bg-blue-500/10 px-6 py-5 text-center text-blue-100">
+          Payment received by Stripe. Waiting for subscription confirmation. Do not pay again.
+        </section>
+      )}
+      {checkoutStatus === "timeout" && (
+        <section role="status" className="mx-auto mb-8 max-w-4xl rounded-2xl border border-amber-400/40 bg-amber-500/10 px-6 py-5 text-center text-amber-100">
+          Subscription confirmation is taking longer than expected. Please refresh this page later. Do not pay again.
+        </section>
+      )}
       {/* PLANS */}
 
       <section className="mx-auto grid max-w-5xl gap-8 px-5 pb-16 md:grid-cols-2">
@@ -225,13 +391,18 @@ const response = await fetch("/api/stripe/checkout", {
             <button
               type="button"
               onClick={() => handleSubscribe(plan)}
+              disabled={subscriptionLoading || alreadySubscribed}
               className={`w-full rounded-xl px-5 py-4 text-base font-black transition hover:brightness-110 ${
                 plan.recommended
                   ? "bg-gradient-to-l from-purple-600 to-blue-500"
                   : "bg-blue-600"
               }`}
             >
-              اشترك الآن
+              {subscriptionLoading
+                ? "جارٍ التحقق..."
+                : alreadySubscribed
+                  ? "لديك اشتراك نشط"
+                  : "اشترك الآن"}
             </button>
           </article>
         ))}

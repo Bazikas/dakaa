@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient, User } from "@supabase/supabase-js";
+import { syncPublicDiagnostic, type SavedDiagnostic } from "@/lib/diagnostic-sync";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -72,7 +73,8 @@ const goalLabels: Record<string, string> = {
 export default function DashboardPage() {
   const router = useRouter();
 
-  const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<User | null>(null);
+  const [diagnostic, setDiagnostic] = useState<SavedDiagnostic | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
 
   const [assessment, setAssessment] =
@@ -107,7 +109,32 @@ export default function DashboardPage() {
         return;
       }
 
-      setUser(user);
+      // DAKAA : controle de l'abonnement avant le dashboard
+      const now = new Date().toISOString();
+
+      const { data: subscription, error: subscriptionError } =
+        await supabase
+          .from("user_subscriptions")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .lte("current_period_start", now)
+          .gt("current_period_end", now)
+          .limit(1)
+          .maybeSingle();
+
+      if (subscriptionError || !subscription) {
+        router.replace("/pricing");
+        return;
+      }
+
+            setUser(user);
+      try {
+        const saved = await syncPublicDiagnostic(supabase);
+        setDiagnostic(saved);
+      } catch (syncError) {
+        console.error("Diagnostic sync:", syncError);
+      }
 
       /* -----------------------------
          Profil
@@ -283,22 +310,26 @@ export default function DashboardPage() {
     levelLabels[assessmentLevel] ||
     assessmentLevel;
 
-  const professionLabel =
-    profile?.profession
-      ? professionLabels[profile.profession] ||
-        profile.profession
-      : "غير محدد";
+  const professionValue =
+    profile?.profession || diagnostic?.profession || "";
 
-  const goalLabel =
-    profile?.goal
-      ? goalLabels[profile.goal] ||
-        profile.goal
-      : "غير محدد";
+  const goalValue =
+    profile?.goal || diagnostic?.goal || "";
 
-  const dailyTime =
-    profile?.daily_time
-      ? `${profile.daily_time} دقيقة`
-      : "غير محدد";
+  const dailyTimeValue =
+    profile?.daily_time || diagnostic?.dailyTime || "";
+
+  const professionLabel = professionValue
+    ? professionLabels[professionValue] || professionValue
+    : "??? ????";
+
+  const goalLabel = goalValue
+    ? goalLabels[goalValue] || goalValue
+    : "??? ????";
+
+  const dailyTime = dailyTimeValue
+    ? `${dailyTimeValue} دقيقة`
+    : "??? ????";
 
   const score = assessment?.score ?? 0;
   const maxScore = assessment?.max_score ?? 18;
@@ -332,7 +363,18 @@ export default function DashboardPage() {
      Prochaine leçon
   ----------------------------- */
 
-  const nextLesson = lessons.find(
+  const recommendedModuleIds = new Set(
+    (diagnostic?.ai?.modules ?? []).map((module) => String(module.id))
+  );
+
+  const rankedLessons = [...lessons].sort((a, b) => {
+    const aRecommended = recommendedModuleIds.has(String(a.module_id));
+    const bRecommended = recommendedModuleIds.has(String(b.module_id));
+
+    return Number(bRecommended) - Number(aRecommended);
+  });
+
+  const nextLesson = rankedLessons.find(
     (lesson) =>
       !completedLessonIds.has(lesson.id)
   );
@@ -416,7 +458,27 @@ export default function DashboardPage() {
       ===================================================== */}
 
       <div className="mx-auto max-w-7xl px-5 py-10">
-        {/* Welcome */}
+                {/* Welcome */}
+        {diagnostic && (
+          <section className="mb-8 rounded-3xl border border-violet-500/30 bg-violet-500/10 p-6">
+            <h3 className="mb-3 text-xl font-black">نتيجة تشخيصك المجاني</h3>
+            <p className="mb-3 text-slate-200">{diagnostic.ai?.summary || diagnostic.project}</p>
+            <p className="mb-4 text-sm text-violet-200">وقت التعلم: {diagnostic.dailyTime} دقيقة يومياً</p>
+            {diagnostic.ai?.modules && diagnostic.ai.modules.length > 0 && (
+              <div className="mb-4 space-y-2">
+                <h4 className="font-bold">الوحدات المقترحة</h4>
+                {diagnostic.ai.modules.map((module) => (
+                  <p key={module.id} className="rounded-xl bg-slate-900/50 p-3">{module.title_ar}</p>
+                ))}
+              </div>
+            )}
+            {diagnostic.ai?.plan && diagnostic.ai.plan.length > 0 && (
+              <ol className="list-inside list-decimal space-y-2 text-sm text-slate-200">
+                {diagnostic.ai.plan.map((step, index) => <li key={index}>{step}</li>)}
+              </ol>
+            )}
+          </section>
+        )}
 
         <section className="mb-10">
           <p className="mb-2 text-blue-300">
@@ -579,7 +641,7 @@ export default function DashboardPage() {
               </h3>
             </div>
 
-            <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-2 font-bold text-purple-300">
+            <div dir="ltr" className="rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-2 font-bold text-purple-300">
               {completedLessonsCount} /{" "}
               {totalLessons}
             </div>
