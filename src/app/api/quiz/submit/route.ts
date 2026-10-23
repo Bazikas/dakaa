@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import Stripe from "stripe";
 
 export const runtime = "nodejs";
 
 const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function errorResponse(message: string, status: number) {
   return NextResponse.json(
@@ -12,15 +13,22 @@ function errorResponse(message: string, status: number) {
       success: false,
       error: message,
     },
-    { status }
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
   );
 }
 
 export async function POST(request: NextRequest) {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
     const publicKey =
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
     const serviceKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -30,6 +38,8 @@ export async function POST(request: NextRequest) {
         500
       );
     }
+
+    // 1. Authentification obligatoire
 
     const authorization =
       request.headers.get("authorization");
@@ -70,6 +80,8 @@ export async function POST(request: NextRequest) {
       !!process.env.DAKAA_ADMIN_USER_ID &&
       userId === process.env.DAKAA_ADMIN_USER_ID;
 
+    // 2. Vérification des données du quiz
+
     let body: unknown;
 
     try {
@@ -89,7 +101,6 @@ export async function POST(request: NextRequest) {
     const input = body as Record<string, unknown>;
 
     const lessonId = input.lessonId;
-
     const answers = input.answers;
 
     if (
@@ -105,43 +116,109 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const submittedAnswers = answers as Record<
-      string,
-      unknown
-    >;
+    const submittedAnswers =
+      answers as Record<string, unknown>;
 
-    // Vérification de l'abonnement.
+    // 3. Vérification de l'abonnement Stripe LIVE
 
     if (!isAdmin) {
       const now = new Date().toISOString();
 
-      const { data: subscription, error: subError } =
+      const { data: subscriptions, error: subError } =
         await admin
           .from("user_subscriptions")
           .select(
-            "id,subscription_plans!inner(active)"
+            "id, stripe_subscription_id, current_period_start, current_period_end, subscription_plans!inner(active)"
           )
           .eq("user_id", userId)
           .eq("status", "active")
           .lte("current_period_start", now)
           .gt("current_period_end", now)
-          .eq("subscription_plans.active", true)
-          .limit(1)
-          .maybeSingle();
+          .eq("subscription_plans.active", true);
 
       if (subError) {
-        throw subError;
+        console.error("DAKAA QUIZ SUBSCRIPTION:", subError);
+
+        return errorResponse(
+          "تعذر التحقق من الاشتراك",
+          503
+        );
       }
 
-      if (!subscription) {
+      if (!subscriptions?.length) {
         return errorResponse(
           "يتطلب الاختبار اشتراكاً نشطاً",
           403
         );
       }
+
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+
+      if (
+        !stripeKey ||
+        (process.env.NODE_ENV === "production" &&
+          !stripeKey.startsWith("rk_live_") &&
+          !stripeKey.startsWith("sk_live_"))
+      ) {
+        return errorResponse(
+          "تعذر التحقق من الاشتراك",
+          503
+        );
+      }
+
+      const stripe = new Stripe(stripeKey);
+
+      let hasLiveSubscription = false;
+      let stripeVerificationFailed = false;
+
+      for (const subscription of subscriptions) {
+        if (!subscription.stripe_subscription_id) {
+          continue;
+        }
+
+        try {
+          const stripeSubscription =
+            await stripe.subscriptions.retrieve(
+              subscription.stripe_subscription_id
+            );
+
+          if (
+            stripeSubscription.livemode === true &&
+            stripeSubscription.status === "active" &&
+            stripeSubscription.metadata.user_id === userId
+          ) {
+            hasLiveSubscription = true;
+            break;
+          }
+        } catch (error) {
+          if (
+            error instanceof Stripe.errors.StripeInvalidRequestError &&
+            error.code === "resource_missing"
+          ) {
+            // Ancien abonnement TEST : refusé en production.
+            continue;
+          }
+
+          console.error(
+            "DAKAA QUIZ STRIPE VERIFICATION:",
+            error
+          );
+
+          stripeVerificationFailed = true;
+        }
+      }
+
+      if (!hasLiveSubscription) {
+        return errorResponse(
+          stripeVerificationFailed
+            ? "تعذر التحقق من الاشتراك"
+            : "يتطلب الاختبار اشتراكاً مدفوعاً ونشطاً",
+          stripeVerificationFailed ? 503 : 403
+        );
+      }
     }
 
-    // Vérifier l'existence de la leçon.
+    // 4. Vérifier l'existence de la leçon
 
     const { data: lesson, error: lessonError } =
       await admin
@@ -158,7 +235,7 @@ export async function POST(request: NextRequest) {
       return errorResponse("الدرس غير موجود", 404);
     }
 
-    // Vérifier que les leçons précédentes sont terminées.
+    // 5. Vérifier l'ordre des modules et leçons
 
     const { data: modules, error: modulesError } =
       await admin
@@ -230,7 +307,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Récupérer les réponses correctes côté serveur uniquement.
+    // 6. Récupérer les réponses correctes côté serveur
 
     const { data: questions, error: questionsError } =
       await admin
@@ -252,7 +329,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Vérifier les réponses transmises.
+    // 7. Vérifier les réponses transmises
 
     const questionIds = new Set(
       questions.map((question) => question.id)
@@ -283,7 +360,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Correction côté serveur.
+    // 8. Correction côté serveur
 
     let correctCount = 0;
 
@@ -317,10 +394,11 @@ export async function POST(request: NextRequest) {
       (correctCount / total) * 100
     );
 
-    // Règle pédagogique actuelle :
-    // toutes les réponses doivent être correctes.
+    // Toutes les réponses doivent être correctes.
 
     const passed = correctCount === total;
+
+    // 9. Enregistrer la progression uniquement si réussi
 
     if (passed) {
       const { error: saveError } = await admin
@@ -349,6 +427,8 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+
+    // 10. Déterminer la prochaine leçon
 
     const nextLesson =
       passed && lessonIndex + 1 < orderedLessons.length
