@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -292,6 +293,87 @@ ${recommendation.focusAreas.join("\n") || "لا توجد نقاط ضعف محد�
 6. اربط التمرين بمهنة المتعلم وهدفه التعليمي.
 7. قدم تمريناً واحداً فقط.
 `;
+}
+
+// ============================================================
+// DAKAA — LIVE STRIPE ENTITLEMENT CHECK
+// Aucune modification des quotas ni des données utilisateurs.
+// ============================================================
+
+async function verifyLiveCoachAccess(
+  userId: string,
+  supabaseUrl: string,
+  serviceRoleKey: string
+): Promise<{ allowed: boolean; unavailable: boolean }> {
+  // Le compte administrateur conserve son accès de développement.
+  if (
+    process.env.DAKAA_ADMIN_USER_ID?.trim() === userId
+  ) {
+    return { allowed: true, unavailable: false };
+  }
+
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (
+    !stripeKey ||
+    (process.env.NODE_ENV === "production" &&
+      !stripeKey.startsWith("rk_live_") &&
+      !stripeKey.startsWith("sk_live_"))
+  ) {
+    return { allowed: false, unavailable: true };
+  }
+
+  const db = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const now = new Date().toISOString();
+  const { data: subscriptions, error } = await db
+    .from("user_subscriptions")
+    .select("stripe_subscription_id, subscription_plans!inner(active)")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .lte("current_period_start", now)
+    .gt("current_period_end", now)
+    .eq("subscription_plans.active", true);
+
+  if (error) {
+    console.error("DAKAA COACH LIVE subscription lookup:", error);
+    return { allowed: false, unavailable: true };
+  }
+
+  if (!subscriptions?.length) {
+    return { allowed: false, unavailable: false };
+  }
+
+  const stripe = new Stripe(stripeKey);
+  let unavailable = false;
+
+  for (const subscription of subscriptions) {
+    if (!subscription.stripe_subscription_id) continue;
+    try {
+      const live = await stripe.subscriptions.retrieve(
+        subscription.stripe_subscription_id
+      );
+      if (
+        live.livemode === true &&
+        live.status === "active" &&
+        live.metadata.user_id === userId
+      ) {
+        return { allowed: true, unavailable: false };
+      }
+    } catch (err) {
+      if (
+        err instanceof Stripe.errors.StripeInvalidRequestError &&
+        err.code === "resource_missing"
+      ) {
+        // L'abonnement TEST n'existe pas dans Stripe LIVE.
+        continue;
+      }
+      console.error("DAKAA COACH LIVE Stripe verification:", err);
+      unavailable = true;
+    }
+  }
+
+  return { allowed: false, unavailable };
 }
 
 // ============================================================
@@ -736,6 +818,23 @@ export async function POST(request: NextRequest) {
 
     // Tous les modes restants effectuent un appel OpenAI.
     // Une réservation est obligatoire avant cet appel.
+
+    // Vérifier Stripe LIVE AVANT toute réservation de quota
+    // et AVANT tout appel facturable à OpenAI.
+    const liveAccess = await verifyLiveCoachAccess(
+      uid,
+      url,
+      serviceRoleKey
+    );
+
+    if (!liveAccess.allowed) {
+      return bad(
+        liveAccess.unavailable
+          ? "تعذر التحقق من الاشتراك حالياً. يرجى المحاولة لاحقاً."
+          : "يتطلب استخدام الأستاذ الذكي اشتراكاً مدفوعاً ونشطاً.",
+        liveAccess.unavailable ? 503 : 403
+      );
+    }
 
     const access = await reserveAIRequest(
       uid,
