@@ -3,18 +3,42 @@ import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type Plan = "standard" | "premium";
+
+type ExistingSubscription = {
+  stripe_subscription_id: string | null;
+};
+
+const noCache = {
+  "Cache-Control": "no-store",
+};
+
+function fail(error: string, status: number) {
+  return NextResponse.json(
+    {
+      success: false,
+      error,
+    },
+    {
+      status,
+      headers: noCache,
+    }
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
     // =====================================================
-    // DAKAA V9 - STRIPE CHECKOUT SÉCURISÉ
+    // DAKAA V10 — STRIPE CHECKOUT LIVE
+    // CORRECTION DES ANCIENS ABONNEMENTS TEST
     // =====================================================
 
     // 1. Variables d'environnement
 
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const stripeKey =
+      process.env.STRIPE_SECRET_KEY;
 
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,31 +46,32 @@ export async function POST(request: NextRequest) {
     const supabaseKey =
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
+    const serviceRoleKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
+
     const standardPrice =
       process.env.STRIPE_PRICE_STANDARD;
 
     const premiumPrice =
       process.env.STRIPE_PRICE_PREMIUM;
 
-    // 2. Vérification de la configuration
+    // 2. Configuration obligatoire
 
     if (
       !stripeKey ||
       !supabaseUrl ||
       !supabaseKey ||
+      !serviceRoleKey ||
       !standardPrice ||
       !premiumPrice
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Configuration Stripe ou Supabase incomplète.",
-        },
-        { status: 500 }
+      return fail(
+        "Configuration Stripe ou Supabase incomplète.",
+        503
       );
     }
 
-    // 3. Protection contre Stripe TEST en production
+    // 3. Stripe LIVE obligatoire en production
 
     if (
       process.env.NODE_ENV === "production" &&
@@ -54,34 +79,36 @@ export async function POST(request: NextRequest) {
       !stripeKey.startsWith("sk_live_")
     ) {
       console.error(
-        "DAKAA SECURITY: Stripe TEST interdit en production."
+        "DAKAA CHECKOUT: Stripe LIVE non configuré."
       );
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Stripe LIVE obligatoire en production.",
-        },
-        { status: 503 }
+      return fail(
+        "Stripe LIVE obligatoire en production.",
+        503
       );
     }
 
     // 4. Authentification Supabase
 
     const authorization =
-      request.headers.get("authorization");
+      request.headers.get("authorization") || "";
 
-    if (!authorization?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Authentification obligatoire.",
-        },
-        { status: 401 }
+    if (!authorization.startsWith("Bearer ")) {
+      return fail(
+        "Authentification obligatoire.",
+        401
       );
     }
 
-    const token = authorization.slice(7).trim();
+    const token =
+      authorization.slice(7).trim();
+
+    if (!token) {
+      return fail(
+        "Authentification obligatoire.",
+        401
+      );
+    }
 
     const supabase = createClient(
       supabaseUrl,
@@ -100,62 +127,50 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Session invalide ou expirée.",
-        },
-        { status: 401 }
+      return fail(
+        "Session invalide ou expirée.",
+        401
       );
     }
 
-    // 5. Récupération de l'offre choisie
+    // 5. Validation de l'offre
 
     let body: unknown;
 
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Données de la requête invalides.",
-        },
-        { status: 400 }
+      return fail(
+        "Données de la requête invalides.",
+        400
       );
     }
 
     const plan =
       typeof body === "object" &&
       body !== null &&
+      !Array.isArray(body) &&
       "plan" in body
         ? (body as { plan?: unknown }).plan
         : undefined;
 
-    if (plan !== "standard" && plan !== "premium") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Offre invalide.",
-        },
-        { status: 400 }
+    if (
+      plan !== "standard" &&
+      plan !== "premium"
+    ) {
+      return fail(
+        "Offre invalide.",
+        400
       );
     }
 
-    // 6. Vérification des abonnements existants
+    const selectedPlan: Plan = plan;
 
-    const serviceRoleKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // 6. Initialisation Stripe
 
-    if (!serviceRoleKey) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Configuration du serveur incomplète.",
-        },
-        { status: 503 }
-      );
-    }
+    const stripe = new Stripe(stripeKey);
+
+    // 7. Client Supabase administrateur
 
     const admin = createClient(
       supabaseUrl,
@@ -168,146 +183,231 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    // =====================================================
+    // 8. RÉCUPÉRATION DES ABONNEMENTS EXISTANTS
+    // =====================================================
+
     const {
-      data: activeSubscriptions,
+      data: existingData,
       error: subscriptionError,
     } = await admin
       .from("user_subscriptions")
-      .select("id, status")
+      .select("stripe_subscription_id")
       .eq("user_id", user.id)
-      .in("status", ["active", "trialing", "past_due"])
-      .limit(1);
+      .in("status", [
+        "active",
+        "trialing",
+        "past_due",
+      ]);
 
     if (subscriptionError) {
       console.error(
-        "DAKAA subscription verification:",
+        "DAKAA CHECKOUT: Supabase subscription error:",
         subscriptionError
       );
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Impossible de vérifier votre abonnement.",
-        },
-        { status: 503 }
+      return fail(
+        "Impossible de vérifier votre abonnement.",
+        503
       );
     }
 
-    if (
-      activeSubscriptions &&
-      activeSubscriptions.length > 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Vous possédez déjà un abonnement. Consultez votre profil.",
-        },
-        { status: 409 }
-      );
+    const existingSubscriptions =
+      (existingData ?? []) as unknown as
+        ExistingSubscription[];
+
+    // =====================================================
+    // 9. VÉRIFICATION RÉELLE AUPRÈS DE STRIPE
+    // =====================================================
+
+    for (const subscription of existingSubscriptions) {
+      const subscriptionId =
+        subscription.stripe_subscription_id;
+
+      if (!subscriptionId) {
+        // Ancienne ligne sans identifiant Stripe.
+        // Elle ne prouve pas l'existence d'un abonnement LIVE.
+        continue;
+      }
+
+      try {
+        const stripeSubscription =
+          await stripe.subscriptions.retrieve(
+            subscriptionId
+          );
+
+        const isLive =
+          stripeSubscription.livemode === true;
+
+        const belongsToUser =
+          stripeSubscription.metadata.user_id ===
+          user.id;
+
+        // Ne pas accepter un abonnement appartenant
+        // à un autre utilisateur.
+        if (isLive && !belongsToUser) {
+          console.error(
+            "DAKAA CHECKOUT: Subscription ownership mismatch."
+          );
+
+          return fail(
+            "Impossible de vérifier votre abonnement.",
+            503
+          );
+        }
+
+        const blockingStatuses = [
+          "active",
+          "trialing",
+          "past_due",
+        ];
+
+        const isBlocking =
+          blockingStatuses.includes(
+            stripeSubscription.status
+          );
+
+        if (
+          isLive &&
+          belongsToUser &&
+          isBlocking
+        ) {
+          return fail(
+            "Vous possédez déjà un abonnement Stripe LIVE. Consultez votre profil.",
+            409
+          );
+        }
+
+      } catch (error) {
+        if (
+          error instanceof
+            Stripe.errors.StripeInvalidRequestError &&
+          error.code === "resource_missing"
+        ) {
+          // Abonnement TEST ou inexistant dans Stripe LIVE.
+          // Ne pas bloquer le nouveau paiement.
+          continue;
+        }
+
+        console.error(
+          "DAKAA CHECKOUT: Stripe verification error:",
+          error
+        );
+
+        return fail(
+          "La vérification de votre abonnement est temporairement indisponible.",
+          503
+        );
+      }
     }
 
-    // 7. Sélection du tarif Stripe
-
-    const selectedPlan: Plan = plan;
+    // =====================================================
+    // 10. SÉLECTION DU TARIF
+    // =====================================================
 
     const priceId =
       selectedPlan === "standard"
         ? standardPrice
         : premiumPrice;
 
-    // 8. Initialisation Stripe
+    // =====================================================
+    // 11. VÉRIFICATION DU TARIF STRIPE
+    // =====================================================
 
-    const stripe = new Stripe(stripeKey);
+    const stripePrice =
+      await stripe.prices.retrieve(priceId);
 
-    // 9. Vérification du tarif Stripe LIVE
-
-    if (process.env.NODE_ENV === "production") {
-      const stripePrice = await stripe.prices.retrieve(priceId);
-
-      if (!stripePrice.active || !stripePrice.recurring) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Tarif Stripe invalide ou inactif.",
-          },
-          { status: 503 }
-        );
-      }
-
-      if (stripePrice.livemode !== true) {
-        console.error(
-          "DAKAA SECURITY: Tarif Stripe TEST interdit."
-        );
-
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Tarif Stripe LIVE obligatoire.",
-          },
-          { status: 503 }
-        );
-      }
+    if (
+      !stripePrice.active ||
+      !stripePrice.recurring
+    ) {
+      return fail(
+        "Tarif Stripe invalide ou inactif.",
+        503
+      );
     }
 
-    // 10. Adresse de retour
+    if (
+      process.env.NODE_ENV === "production" &&
+      stripePrice.livemode !== true
+    ) {
+      console.error(
+        "DAKAA CHECKOUT: Tarif Stripe TEST interdit."
+      );
+
+      return fail(
+        "Tarif Stripe LIVE obligatoire.",
+        503
+      );
+    }
+
+    // =====================================================
+    // 12. ADRESSE DE RETOUR
+    // =====================================================
 
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL ||
       "https://dakaa-production.up.railway.app";
 
-    const baseUrl = appUrl.replace(/\/$/, "");
+    const baseUrl =
+      appUrl.replace(/\/$/, "");
 
-    // 11. Création de la session Checkout
+    // =====================================================
+    // 13. CRÉATION DE LA SESSION CHECKOUT
+    // =====================================================
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
+    const session =
+      await stripe.checkout.sessions.create({
+        mode: "subscription",
 
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
 
-      client_reference_id: user.id,
+        client_reference_id: user.id,
 
-      ...(user.email
-        ? { customer_email: user.email }
-        : {}),
+        ...(user.email
+          ? {
+              customer_email: user.email,
+            }
+          : {}),
 
-      metadata: {
-        user_id: user.id,
-        plan: selectedPlan,
-      },
-
-      subscription_data: {
         metadata: {
           user_id: user.id,
           plan: selectedPlan,
         },
-      },
 
-      success_url:
-        `${baseUrl}/pricing?checkout=success`,
+        subscription_data: {
+          metadata: {
+            user_id: user.id,
+            plan: selectedPlan,
+          },
+        },
 
-      cancel_url:
-        `${baseUrl}/pricing?checkout=cancel`,
-    });
+        success_url:
+          `${baseUrl}/pricing?checkout=success`,
 
-    // 12. Vérification de la session
+        cancel_url:
+          `${baseUrl}/pricing?checkout=cancel`,
+      });
+
+    // =====================================================
+    // 14. VÉRIFICATION DE LA SESSION
+    // =====================================================
 
     if (!session.url) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Impossible de créer la session Stripe.",
-        },
-        { status: 500 }
+      return fail(
+        "Impossible de créer la session Stripe.",
+        500
       );
     }
 
-    // 13. Réponse au navigateur
+    // =====================================================
+    // 15. RÉPONSE AU NAVIGATEUR
+    // =====================================================
 
     return NextResponse.json(
       {
@@ -316,20 +416,21 @@ export async function POST(request: NextRequest) {
         sessionId: session.id,
         plan: selectedPlan,
       },
-      { status: 200 }
+      {
+        status: 200,
+        headers: noCache,
+      }
     );
+
   } catch (error) {
     console.error(
-      "DAKAA V9 - STRIPE CHECKOUT ERROR:",
+      "DAKAA V10 - STRIPE CHECKOUT ERROR:",
       error
     );
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Erreur lors de la création du paiement.",
-      },
-      { status: 500 }
+    return fail(
+      "Erreur lors de la création du paiement.",
+      500
     );
   }
 }
