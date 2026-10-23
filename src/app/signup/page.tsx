@@ -30,12 +30,12 @@ export default function SignupPage() {
     setSuccessMessage("");
 
     if (name.trim().length < 2) {
-      setErrorMessage("ÙŠØ±Ø¬Ù‰ Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø§Ø³Ù… Ø§Ù„ÙƒØ§Ù…Ù„.");
+      setErrorMessage("┘èÏ▒Ï¼┘ë ÏÑÏ»Ï«Ïº┘ä Ïº┘äÏºÏ│┘à Ïº┘ä┘âÏº┘à┘ä.");
       return;
     }
 
     if (password.length < 8) {
-      setErrorMessage("ÙŠØ¬Ø¨ Ø£Ù† ØªØ­ØªÙˆÙŠ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± Ø¹Ù„Ù‰ 8 Ø£Ø­Ø±Ù Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„.");
+      setErrorMessage("┘èÏ¼Ï¿ Ïú┘å Ï¬Ï¡Ï¬┘ê┘è ┘â┘ä┘àÏ® Ïº┘ä┘àÏ▒┘êÏ▒ Ï╣┘ä┘ë 8 ÏúÏ¡Ï▒┘ü Ï╣┘ä┘ë Ïº┘äÏú┘é┘ä.");
       return;
     }
 
@@ -60,20 +60,20 @@ export default function SignupPage() {
       }
 
       if (!data.user) {
-        setErrorMessage("ØªØ¹Ø°Ø± Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨. Ø­Ø§ÙˆÙ„ Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.");
+        setErrorMessage("Ï¬Ï╣Ï░Ï▒ ÏÑ┘åÏ┤ÏºÏí Ïº┘äÏ¡Ï│ÏºÏ¿. Ï¡Ïº┘ê┘ä ┘àÏ▒Ï® ÏúÏ«Ï▒┘ë.");
         return;
       }
 
       if (!data.session) {
         setSuccessMessage(
-          "ØªÙ… Ø§Ø³ØªÙ„Ø§Ù… Ø·Ù„Ø¨ Ø§Ù„ØªØ³Ø¬ÙŠÙ„. ØªØ­Ù‚Ù‚ Ù…Ù† Ø¨Ø±ÙŠØ¯Ùƒ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ Ù„ØªØ£ÙƒÙŠØ¯ Ø§Ù„Ø­Ø³Ø§Ø¨ØŒ Ø«Ù… Ø³Ø¬Ù„ Ø§Ù„Ø¯Ø®ÙˆÙ„."
+          "Ï¬┘à ÏºÏ│Ï¬┘äÏº┘à ÏÀ┘äÏ¿ Ïº┘äÏ¬Ï│Ï¼┘è┘ä. Ï¬Ï¡┘é┘é ┘à┘å Ï¿Ï▒┘èÏ»┘â Ïº┘äÏÑ┘ä┘âÏ¬Ï▒┘ê┘å┘è ┘äÏ¬Ïú┘â┘èÏ» Ïº┘äÏ¡Ï│ÏºÏ¿Ïî Ï½┘à Ï│Ï¼┘ä Ïº┘äÏ»Ï«┘ê┘ä."
         );
         return;
       }
 
             try { await syncPublicDiagnostic(supabase); }
       catch (syncError) { console.error("Diagnostic sync:", syncError); }
-      setSuccessMessage("ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨ Ø¨Ù†Ø¬Ø§Ø­.");
+      setSuccessMessage("Ï¬┘à ÏÑ┘åÏ┤ÏºÏí Ïº┘äÏ¡Ï│ÏºÏ¿ Ï¿┘åÏ¼ÏºÏ¡.");
 
       router.push("/pricing");
       router.refresh();
@@ -82,7 +82,7 @@ export default function SignupPage() {
       console.error("DAKAA SIGNUP ERROR:", error);
 
       setErrorMessage(
-        "Ø­Ø¯Ø« Ø®Ø·Ø£ ØºÙŠØ± Ù…ØªÙˆÙ‚Ø¹. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø© Ù…Ø±Ø© Ø£Ø®Ø±Ù‰."
+        "Ï¡Ï»Ï½ Ï«ÏÀÏú Ï║┘èÏ▒ ┘àÏ¬┘ê┘éÏ╣. ┘èÏ▒Ï¼┘ë Ïº┘ä┘àÏ¡Ïº┘ê┘äÏ® ┘àÏ▒Ï® ÏúÏ«Ï▒┘ë."
       );
     } finally {
       setLoading(false);
@@ -108,17 +108,17 @@ export default function SignupPage() {
 
           <div>
             <div className="text-xl font-black">DAKAA</div>
-            <div className="text-xs text-blue-300">Ø°ÙƒØ§Ø¡</div>
+            <div className="text-xs text-blue-300">Ï░┘âÏºÏí</div>
           </div>
         </Link>
 
         <div className="rounded-[32px] border border-white/10 bg-white/[0.06] p-8 shadow-2xl backdrop-blur-xl sm:p-10">
           <h1 className="text-center text-3xl font-black">
-            Ø£Ù†Ø´Ø¦ Ø­Ø³Ø§Ø¨Ùƒ
+            Ïú┘åÏ┤Ïª Ï¡Ï│ÏºÏ¿┘â
           </h1>
 
           <p className="mt-3 text-center leading-7 text-slate-400">
-            Ø§Ø­ÙØ¸ Ù…Ø³Ø§Ø±Ùƒ Ø§Ù„ØªØ¹Ù„ÙŠÙ…ÙŠ ÙˆØ§Ø®ØªØ± Ø§Ø´ØªØ±Ø§ÙƒÙƒ Ù„Ù„Ø¨Ø¯Ø¡ Ù…Ø¹ DAKAA
+            ÏºÏ¡┘üÏ© ┘àÏ│ÏºÏ▒┘â Ïº┘äÏ¬Ï╣┘ä┘è┘à┘è ┘êÏºÏ«Ï¬Ï▒ ÏºÏ┤Ï¬Ï▒Ïº┘â┘â ┘ä┘äÏ¿Ï»Ïí ┘àÏ╣ DAKAA
           </p>
 
           <form
@@ -130,7 +130,7 @@ export default function SignupPage() {
                 htmlFor="signup-name"
                 className="mb-2 block text-sm text-slate-300"
               >
-                Ø§Ù„Ø§Ø³Ù… Ø§Ù„ÙƒØ§Ù…Ù„
+                Ïº┘äÏºÏ│┘à Ïº┘ä┘âÏº┘à┘ä
               </label>
 
               <input
@@ -142,7 +142,7 @@ export default function SignupPage() {
                 autoComplete="name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Ø£Ø¯Ø®Ù„ Ø§Ø³Ù…Ùƒ"
+                placeholder="ÏúÏ»Ï«┘ä ÏºÏ│┘à┘â"
                 className="w-full rounded-2xl border border-white/10 bg-[#0d1935] px-4 py-4 text-white outline-none focus:border-violet-500"
               />
             </div>
@@ -152,7 +152,7 @@ export default function SignupPage() {
                 htmlFor="signup-email"
                 className="mb-2 block text-sm text-slate-300"
               >
-                Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ
+                Ïº┘äÏ¿Ï▒┘èÏ» Ïº┘äÏÑ┘ä┘âÏ¬Ï▒┘ê┘å┘è
               </label>
 
               <input
@@ -173,7 +173,7 @@ export default function SignupPage() {
                 htmlFor="signup-password"
                 className="mb-2 block text-sm text-slate-300"
               >
-                ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ±
+                ┘â┘ä┘àÏ® Ïº┘ä┘àÏ▒┘êÏ▒
               </label>
 
               <input
@@ -184,7 +184,7 @@ export default function SignupPage() {
                 autoComplete="new-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="8 Ø£Ø­Ø±Ù Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„"
+                placeholder="8 ÏúÏ¡Ï▒┘ü Ï╣┘ä┘ë Ïº┘äÏú┘é┘ä"
                 className="w-full rounded-2xl border border-white/10 bg-[#0d1935] px-4 py-4 text-white outline-none focus:border-violet-500"
               />
             </div>
@@ -210,7 +210,7 @@ export default function SignupPage() {
                     href="/login"
                     className="font-bold underline"
                   >
-                    ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„
+                    Ï¬Ï│Ï¼┘è┘ä Ïº┘äÏ»Ï«┘ê┘ä
                   </Link>
                 </div>
               </div>
@@ -221,17 +221,17 @@ export default function SignupPage() {
               disabled={loading || Boolean(successMessage)}
               className="w-full rounded-2xl bg-gradient-to-l from-violet-600 to-blue-500 px-6 py-4 font-bold text-white transition hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? "Ø¬Ø§Ø±ÙŠ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨..." : "Ø¥Ù†Ø´Ø§Ø¡ Ø­Ø³Ø§Ø¨"}
+              {loading ? "Ï¼ÏºÏ▒┘è ÏÑ┘åÏ┤ÏºÏí Ïº┘äÏ¡Ï│ÏºÏ¿..." : "ÏÑ┘åÏ┤ÏºÏí Ï¡Ï│ÏºÏ¿"}
             </button>
           </form>
 
           <p className="mt-8 text-center text-sm text-slate-400">
-            Ù„Ø¯ÙŠÙƒ Ø­Ø³Ø§Ø¨ Ø¨Ø§Ù„ÙØ¹Ù„ØŸ{" "}
+            ┘äÏ»┘è┘â Ï¡Ï│ÏºÏ¿ Ï¿Ïº┘ä┘üÏ╣┘äÏƒ{" "}
             <Link
               href="/login"
               className="font-bold text-violet-400"
             >
-              ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„
+              Ï¬Ï│Ï¼┘è┘ä Ïº┘äÏ»Ï«┘ê┘ä
             </Link>
           </p>
         </div>
