@@ -14,6 +14,15 @@ function getConfig() {
     throw new Error("Configuration Stripe ou Supabase incomplète.");
   }
 
+  // DAKAA : interdire les clés Stripe TEST en production.
+  if (
+    process.env.NODE_ENV === "production" &&
+    !stripeKey.startsWith("rk_live_") &&
+    !stripeKey.startsWith("sk_live_")
+  ) {
+    throw new Error("Stripe TEST interdit en production.");
+  }
+
   return {
     stripe: new Stripe(stripeKey),
     webhookSecret,
@@ -52,6 +61,19 @@ export async function POST(request: NextRequest) {
     } catch {
       return NextResponse.json(
         { error: "Signature Stripe invalide." },
+        { status: 400 }
+      );
+    }
+
+    // Refuser explicitement les événements Stripe TEST.
+    if (
+      process.env.NODE_ENV === "production" &&
+      event.livemode !== true
+    ) {
+      console.error("DAKAA SECURITY: événement Stripe TEST refusé.");
+
+      return NextResponse.json(
+        { error: "Événement Stripe TEST interdit." },
         { status: 400 }
       );
     }
@@ -97,6 +119,19 @@ export async function POST(request: NextRequest) {
       planCode = subscription.metadata.plan;
     }
 
+    // Vérifier également l'abonnement Stripe lui-même.
+    subscription = await stripe.subscriptions.retrieve(subscription.id);
+
+    if (
+      process.env.NODE_ENV === "production" &&
+      subscription.livemode !== true
+    ) {
+      return NextResponse.json(
+        { error: "Abonnement Stripe TEST interdit." },
+        { status: 400 }
+      );
+    }
+
     if (!userId || !planCode) {
       console.error("Webhook : utilisateur ou formule introuvable.");
 
@@ -127,9 +162,6 @@ export async function POST(request: NextRequest) {
         ? subscription.customer
         : subscription.customer.id;
 
-    // Lire la version actuelle de l'abonnement Stripe.
-    subscription = await stripe.subscriptions.retrieve(subscription.id);
-
     const item = subscription.items.data[0];
 
     const startTimestamp = item?.current_period_start;
@@ -139,7 +171,7 @@ export async function POST(request: NextRequest) {
       subscription.status === "active" &&
       (!startTimestamp || !endTimestamp || endTimestamp <= startTimestamp)
     ) {
-      throw new Error("Abonnement actif sans periode Stripe valide.");
+      throw new Error("Abonnement actif sans période Stripe valide.");
     }
 
     const periodStart = startTimestamp
@@ -149,6 +181,7 @@ export async function POST(request: NextRequest) {
     const periodEnd = endTimestamp
       ? new Date(endTimestamp * 1000).toISOString()
       : null;
+
     const canceledAt = subscription.canceled_at
       ? new Date(subscription.canceled_at * 1000).toISOString()
       : null;
@@ -177,18 +210,20 @@ export async function POST(request: NextRequest) {
     }
 
     if (existing) {
-
       if (
         existing.user_id !== userId ||
         existing.stripe_customer_id !== customerId
       ) {
-        console.error("DAKAA WEBHOOK: ownership mismatch", subscription.id);
+        console.error(
+          "DAKAA WEBHOOK: ownership mismatch",
+          subscription.id
+        );
+
         return NextResponse.json(
           { error: "Subscription ownership mismatch." },
           { status: 409 }
         );
       }
-
 
       const { error } = await supabase
         .from("user_subscriptions")

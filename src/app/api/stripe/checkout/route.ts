@@ -9,7 +9,7 @@ type Plan = "standard" | "premium";
 export async function POST(request: NextRequest) {
   try {
     // =====================================================
-    // DAKAA V8 - STRIPE CHECKOUT
+    // DAKAA V9 - STRIPE CHECKOUT SÉCURISÉ
     // =====================================================
 
     // 1. Variables d'environnement
@@ -46,7 +46,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Authentification Supabase
+    // 3. Protection contre Stripe TEST en production
+
+    if (
+      process.env.NODE_ENV === "production" &&
+      !stripeKey.startsWith("rk_live_") &&
+      !stripeKey.startsWith("sk_live_")
+    ) {
+      console.error(
+        "DAKAA SECURITY: Stripe TEST interdit en production."
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Stripe LIVE obligatoire en production.",
+        },
+        { status: 503 }
+      );
+    }
+
+    // 4. Authentification Supabase
 
     const authorization =
       request.headers.get("authorization");
@@ -89,7 +109,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Récupération de l'offre choisie
+    // 5. Récupération de l'offre choisie
 
     let body: unknown;
 
@@ -122,14 +142,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // DAKAA_DUPLICATE_SUBSCRIPTION_GUARD
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // 6. Vérification des abonnements existants
+
+    const serviceRoleKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!serviceRoleKey) {
       return NextResponse.json(
         {
           success: false,
-          error: "Configuration du serveur incomplete.",
+          error: "Configuration du serveur incomplète.",
         },
         { status: 503 }
       );
@@ -146,13 +168,15 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const { data: activeSubscriptions, error: subscriptionError } =
-      await admin
-        .from("user_subscriptions")
-        .select("id, status")
-        .eq("user_id", user.id)
-        .in("status", ["active", "trialing", "past_due"])
-        .limit(1);
+    const {
+      data: activeSubscriptions,
+      error: subscriptionError,
+    } = await admin
+      .from("user_subscriptions")
+      .select("id, status")
+      .eq("user_id", user.id)
+      .in("status", ["active", "trialing", "past_due"])
+      .limit(1);
 
     if (subscriptionError) {
       console.error(
@@ -163,23 +187,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Impossible de verifier votre abonnement.",
+          error: "Impossible de vérifier votre abonnement.",
         },
         { status: 503 }
       );
     }
 
-    if (activeSubscriptions && activeSubscriptions.length > 0) {
+    if (
+      activeSubscriptions &&
+      activeSubscriptions.length > 0
+    ) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Vous possedez deja un abonnement. Consultez votre profil.",
+            "Vous possédez déjà un abonnement. Consultez votre profil.",
         },
         { status: 409 }
       );
     }
-    // 5. Sélection du tarif Stripe
+
+    // 7. Sélection du tarif Stripe
 
     const selectedPlan: Plan = plan;
 
@@ -188,19 +216,49 @@ export async function POST(request: NextRequest) {
         ? standardPrice
         : premiumPrice;
 
-    // 6. Initialisation Stripe
+    // 8. Initialisation Stripe
 
     const stripe = new Stripe(stripeKey);
 
-    // 7. Adresse de retour
+    // 9. Vérification du tarif Stripe LIVE
+
+    if (process.env.NODE_ENV === "production") {
+      const stripePrice = await stripe.prices.retrieve(priceId);
+
+      if (!stripePrice.active || !stripePrice.recurring) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Tarif Stripe invalide ou inactif.",
+          },
+          { status: 503 }
+        );
+      }
+
+      if (stripePrice.livemode !== true) {
+        console.error(
+          "DAKAA SECURITY: Tarif Stripe TEST interdit."
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Tarif Stripe LIVE obligatoire.",
+          },
+          { status: 503 }
+        );
+      }
+    }
+
+    // 10. Adresse de retour
 
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL ||
-      "http://localhost:3000";
+      "https://dakaa-production.up.railway.app";
 
     const baseUrl = appUrl.replace(/\/$/, "");
 
-    // 8. Création de la session Checkout
+    // 11. Création de la session Checkout
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -237,7 +295,7 @@ export async function POST(request: NextRequest) {
         `${baseUrl}/pricing?checkout=cancel`,
     });
 
-    // 9. Vérification de la session
+    // 12. Vérification de la session
 
     if (!session.url) {
       return NextResponse.json(
@@ -249,7 +307,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 10. Réponse au navigateur
+    // 13. Réponse au navigateur
 
     return NextResponse.json(
       {
@@ -262,7 +320,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error(
-      "DAKAA V8 - STRIPE CHECKOUT ERROR:",
+      "DAKAA V9 - STRIPE CHECKOUT ERROR:",
       error
     );
 
