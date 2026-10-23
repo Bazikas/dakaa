@@ -30,12 +30,12 @@ export default function SignupPage() {
     setSuccessMessage("");
 
     if (name.trim().length < 2) {
-      setErrorMessage("┘èÏ▒Ï¼┘ë ÏÑÏ»Ï«Ïº┘ä Ïº┘äÏºÏ│┘à Ïº┘ä┘âÏº┘à┘ä.");
+      setErrorMessage("يرجى إدخال الاسم الكامل.");
       return;
     }
 
     if (password.length < 8) {
-      setErrorMessage("┘èÏ¼Ï¿ Ïú┘å Ï¬Ï¡Ï¬┘ê┘è ┘â┘ä┘àÏ® Ïº┘ä┘àÏ▒┘êÏ▒ Ï╣┘ä┘ë 8 ÏúÏ¡Ï▒┘ü Ï╣┘ä┘ë Ïº┘äÏú┘é┘ä.");
+      setErrorMessage("يجب أن تحتوي كلمة المرور على 8 أحرف على الأقل.");
       return;
     }
 
@@ -60,20 +60,20 @@ export default function SignupPage() {
       }
 
       if (!data.user) {
-        setErrorMessage("Ï¬Ï╣Ï░Ï▒ ÏÑ┘åÏ┤ÏºÏí Ïº┘äÏ¡Ï│ÏºÏ¿. Ï¡Ïº┘ê┘ä ┘àÏ▒Ï® ÏúÏ«Ï▒┘ë.");
+        setErrorMessage("تعذر إنشاء الحساب. حاول مرة أخرى.");
         return;
       }
 
       if (!data.session) {
         setSuccessMessage(
-          "Ï¬┘à ÏºÏ│Ï¬┘äÏº┘à ÏÀ┘äÏ¿ Ïº┘äÏ¬Ï│Ï¼┘è┘ä. Ï¬Ï¡┘é┘é ┘à┘å Ï¿Ï▒┘èÏ»┘â Ïº┘äÏÑ┘ä┘âÏ¬Ï▒┘ê┘å┘è ┘äÏ¬Ïú┘â┘èÏ» Ïº┘äÏ¡Ï│ÏºÏ¿Ïî Ï½┘à Ï│Ï¼┘ä Ïº┘äÏ»Ï«┘ê┘ä."
+          "تم استلام طلب التسجيل. تحقق من بريدك الإلكتروني لتأكيد الحساب، ثم سجل الدخول."
         );
         return;
       }
 
             try { await syncPublicDiagnostic(supabase); }
       catch (syncError) { console.error("Diagnostic sync:", syncError); }
-      setSuccessMessage("Ï¬┘à ÏÑ┘åÏ┤ÏºÏí Ïº┘äÏ¡Ï│ÏºÏ¿ Ï¿┘åÏ¼ÏºÏ¡.");
+      setSuccessMessage("تم إنشاء الحساب بنجاح.");
 
       router.push("/pricing");
       router.refresh();
@@ -82,7 +82,7 @@ export default function SignupPage() {
       console.error("DAKAA SIGNUP ERROR:", error);
 
       setErrorMessage(
-        "Ï¡Ï»Ï½ Ï«ÏÀÏú Ï║┘èÏ▒ ┘àÏ¬┘ê┘éÏ╣. ┘èÏ▒Ï¼┘ë Ïº┘ä┘àÏ¡Ïº┘ê┘äÏ® ┘àÏ▒Ï® ÏúÏ«Ï▒┘ë."
+        "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى."
       );
     } finally {
       setLoading(false);
@@ -108,17 +108,17 @@ export default function SignupPage() {
 
           <div>
             <div className="text-xl font-black">DAKAA</div>
-            <div className="text-xs text-blue-300">Ï░┘âÏºÏí</div>
+            <div className="text-xs text-blue-300">ذكاء</div>
           </div>
         </Link>
 
         <div className="rounded-[32px] border border-white/10 bg-white/[0.06] p-8 shadow-2xl backdrop-blur-xl sm:p-10">
           <h1 className="text-center text-3xl font-black">
-            Ïú┘åÏ┤Ïª Ï¡Ï│ÏºÏ¿┘â
+            أنشئ حسابك
           </h1>
 
           <p className="mt-3 text-center leading-7 text-slate-400">
-            ÏºÏ¡┘üÏ© ┘àÏ│ÏºÏ▒┘â Ïº┘äÏ¬Ï╣┘ä┘è┘à┘è ┘êÏºÏ«Ï¬Ï▒ ÏºÏ┤Ï¬Ï▒Ïº┘â┘â ┘ä┘äÏ¿Ï»Ïí ┘àÏ╣ DAKAA
+            احفظ مسارك التعليمي واختر اشتراكك للبدء مع DAKAA
           </p>
 
           <form
@@ -130,7 +130,7 @@ export default function SignupPage() {
                 htmlFor="signup-name"
                 className="mb-2 block text-sm text-slate-300"
               >
-                Ïº┘äÏºÏ│┘à Ïº┘ä┘âÏº┘à┘ä
+                الاسم الكامل
               </label>
 
               <input
@@ -142,7 +142,7 @@ export default function SignupPage() {
                 autoComplete="name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="ÏúÏ»Ï«┘ä ÏºÏ│┘à┘â"
+                placeholder="أدخل اسمك"
                 className="w-full rounded-2xl border border-white/10 bg-[#0d1935] px-4 py-4 text-white outline-none focus:border-violet-500"
               />
             </div>
@@ -152,7 +152,7 @@ export default function SignupPage() {
                 htmlFor="signup-email"
                 className="mb-2 block text-sm text-slate-300"
               >
-                Ïº┘äÏ¿Ï▒┘èÏ» Ïº┘äÏÑ┘ä┘âÏ¬Ï▒┘ê┘å┘è
+                البريد الإلكتروني
               </label>
 
               <input
@@ -173,7 +173,7 @@ export default function SignupPage() {
                 htmlFor="signup-password"
                 className="mb-2 block text-sm text-slate-300"
               >
-                ┘â┘ä┘àÏ® Ïº┘ä┘àÏ▒┘êÏ▒
+                كلمة المرور
               </label>
 
               <input
@@ -184,7 +184,7 @@ export default function SignupPage() {
                 autoComplete="new-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="8 ÏúÏ¡Ï▒┘ü Ï╣┘ä┘ë Ïº┘äÏú┘é┘ä"
+                placeholder="8 أحرف على الأقل"
                 className="w-full rounded-2xl border border-white/10 bg-[#0d1935] px-4 py-4 text-white outline-none focus:border-violet-500"
               />
             </div>
@@ -210,7 +210,7 @@ export default function SignupPage() {
                     href="/login"
                     className="font-bold underline"
                   >
-                    Ï¬Ï│Ï¼┘è┘ä Ïº┘äÏ»Ï«┘ê┘ä
+                    تسجيل الدخول
                   </Link>
                 </div>
               </div>
@@ -221,17 +221,17 @@ export default function SignupPage() {
               disabled={loading || Boolean(successMessage)}
               className="w-full rounded-2xl bg-gradient-to-l from-violet-600 to-blue-500 px-6 py-4 font-bold text-white transition hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? "Ï¼ÏºÏ▒┘è ÏÑ┘åÏ┤ÏºÏí Ïº┘äÏ¡Ï│ÏºÏ¿..." : "ÏÑ┘åÏ┤ÏºÏí Ï¡Ï│ÏºÏ¿"}
+              {loading ? "جاري إنشاء الحساب..." : "إنشاء حساب"}
             </button>
           </form>
 
           <p className="mt-8 text-center text-sm text-slate-400">
-            ┘äÏ»┘è┘â Ï¡Ï│ÏºÏ¿ Ï¿Ïº┘ä┘üÏ╣┘äÏƒ{" "}
+            لديك حساب بالفعل؟{" "}
             <Link
               href="/login"
               className="font-bold text-violet-400"
             >
-              Ï¬Ï│Ï¼┘è┘ä Ïº┘äÏ»Ï«┘ê┘ä
+              تسجيل الدخول
             </Link>
           </p>
         </div>
