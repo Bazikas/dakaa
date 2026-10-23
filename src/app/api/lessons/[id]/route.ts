@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import Stripe from "stripe";
 
 export const runtime = "nodejs";
 
@@ -84,25 +85,19 @@ export async function GET(
       userId === process.env.DAKAA_ADMIN_USER_ID;
 
     if (!isAdmin) {
-      const { data: subscription, error: subError } =
+      const now = new Date().toISOString();
+
+      const { data: subscriptions, error: subError } =
         await admin
           .from("user_subscriptions")
           .select(
-            "id, status, current_period_start, current_period_end, subscription_plans!inner(active)"
+            "id, status, stripe_subscription_id, current_period_start, current_period_end, subscription_plans!inner(active)"
           )
           .eq("user_id", userId)
           .eq("status", "active")
-          .lte(
-            "current_period_start",
-            new Date().toISOString()
-          )
-          .gt(
-            "current_period_end",
-            new Date().toISOString()
-          )
-          .eq("subscription_plans.active", true)
-          .limit(1)
-          .maybeSingle();
+          .lte("current_period_start", now)
+          .gt("current_period_end", now)
+          .eq("subscription_plans.active", true);
 
       if (subError) {
         console.error("Subscription:", subError);
@@ -112,10 +107,76 @@ export async function GET(
         );
       }
 
-      if (!subscription) {
+      if (!subscriptions?.length) {
         return errorResponse(
           "يتطلب هذا الدرس اشتراكاً نشطاً",
           403
+        );
+      }
+
+      // Vérification de l'abonnement dans Stripe LIVE.
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+
+      if (
+        !stripeKey ||
+        (process.env.NODE_ENV === "production" &&
+          !stripeKey.startsWith("rk_live_") &&
+          !stripeKey.startsWith("sk_live_"))
+      ) {
+        return errorResponse(
+          "تعذر التحقق من الاشتراك",
+          503
+        );
+      }
+
+      const stripe = new Stripe(stripeKey);
+
+      let hasLiveSubscription = false;
+      let stripeVerificationFailed = false;
+
+      for (const subscription of subscriptions) {
+        if (!subscription.stripe_subscription_id) {
+          continue;
+        }
+
+        try {
+          const stripeSubscription =
+            await stripe.subscriptions.retrieve(
+              subscription.stripe_subscription_id
+            );
+
+          if (
+            stripeSubscription.livemode === true &&
+            stripeSubscription.status === "active" &&
+            stripeSubscription.metadata.user_id === userId
+          ) {
+            hasLiveSubscription = true;
+            break;
+          }
+        } catch (error) {
+          if (
+            error instanceof Stripe.errors.StripeInvalidRequestError &&
+            error.code === "resource_missing"
+          ) {
+            // Abonnement TEST absent de Stripe LIVE.
+            continue;
+          }
+
+          console.error(
+            "DAKAA Stripe subscription verification:",
+            error
+          );
+
+          stripeVerificationFailed = true;
+        }
+      }
+
+      if (!hasLiveSubscription) {
+        return errorResponse(
+          stripeVerificationFailed
+            ? "تعذر التحقق من الاشتراك"
+            : "يتطلب هذا الدرس اشتراكاً مدفوعاً ونشطاً",
+          stripeVerificationFailed ? 503 : 403
         );
       }
     }
@@ -136,8 +197,6 @@ export async function GET(
     if (!lesson) {
       return errorResponse("الدرس غير موجود", 404);
     }
-
-    // Vérifier l'ordre réel des modules et des leçons.
 
     const { data: modules, error: modulesError } =
       await admin
@@ -211,8 +270,6 @@ export async function GET(
         403
       );
     }
-
-    // Les réponses correctes ne sont jamais envoyées.
 
     const { data: questions, error: questionsError } =
       await admin
